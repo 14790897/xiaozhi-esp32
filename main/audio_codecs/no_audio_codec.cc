@@ -315,20 +315,36 @@ NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output
 #endif
     ESP_LOGI(TAG, "Simplex channels created");
 }
-
 int NoAudioCodec::Write(const int16_t *data, int samples)
 {
-    std::vector<int16_t> stereo_buffer(samples * 2); // 左右声道交错
+    std::vector<int16_t> stereo_buffer(samples * 2); // L-R-L-R 格式
+
+    // 音量因子（平方方式，更平滑）：0 ~ 65536
+    int32_t volume_factor = pow(double(output_volume_) / 100.0, 2) * 65536;
+
     for (int i = 0; i < samples; i++)
     {
-        int16_t value = data[i] * output_volume_ / 100;
-        stereo_buffer[2 * i] = value;     // 左声道
-        stereo_buffer[2 * i + 1] = value; // 右声道
+        // 用 64 位整数进行乘法，避免溢出
+        int64_t temp = int64_t(data[i]) * volume_factor;
+
+        // 裁剪到 16-bit 范围
+        int16_t sample_val;
+        if (temp > INT16_MAX * 65536)
+            sample_val = INT16_MAX;
+        else if (temp < INT16_MIN * 65536)
+            sample_val = INT16_MIN;
+        else
+            sample_val = temp >> 16; // 回到 16-bit 范围
+
+        // 写入左右声道（相同内容，立体声复制）
+        stereo_buffer[2 * i] = sample_val;     // 左声道
+        stereo_buffer[2 * i + 1] = sample_val; // 右声道
     }
 
     size_t bytes_written;
     ESP_ERROR_CHECK(i2s_channel_write(tx_handle_, stereo_buffer.data(), stereo_buffer.size() * sizeof(int16_t), &bytes_written, portMAX_DELAY));
-    return bytes_written / (2 * sizeof(int16_t)); // 返回采样点数
+
+    return bytes_written / (2 * sizeof(int16_t)); // 返回写入的帧数
 }
 
 int NoAudioCodec::Read(int16_t* dest, int samples) {
