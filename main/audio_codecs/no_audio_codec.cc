@@ -36,39 +36,20 @@ NoAudioCodecDuplex::NoAudioCodecDuplex(int input_sample_rate, int output_sample_
             .sample_rate_hz = (uint32_t)output_sample_rate_,
             .clk_src = I2S_CLK_SRC_DEFAULT,
             .mclk_multiple = I2S_MCLK_MULTIPLE_256,
-			#ifdef   I2S_HW_VERSION_2
-				.ext_clk_freq_hz = 0,
-			#endif
+#ifdef I2S_HW_VERSION_2
+            .ext_clk_freq_hz = 0,
+#endif
 
         },
-        .slot_cfg = {
-            .data_bit_width = I2S_DATA_BIT_WIDTH_32BIT,
-            .slot_bit_width = I2S_SLOT_BIT_WIDTH_AUTO,
-            .slot_mode = I2S_SLOT_MODE_MONO,
-            .slot_mask = I2S_STD_SLOT_LEFT,
-            .ws_width = I2S_DATA_BIT_WIDTH_32BIT,
-            .ws_pol = false,
-            .bit_shift = true,
-            #ifdef   I2S_HW_VERSION_2
-                .left_align = true,
-                .big_endian = false,
-                .bit_order_lsb = false
-            #endif
+        .slot_cfg = {.data_bit_width = I2S_DATA_BIT_WIDTH_16BIT, .slot_bit_width = I2S_SLOT_BIT_WIDTH_AUTO, .slot_mode = I2S_SLOT_MODE_STEREO, .slot_mask = I2S_STD_SLOT_BOTH, .ws_width = I2S_DATA_BIT_WIDTH_16BIT, .ws_pol = false, .bit_shift = true,
+#ifdef I2S_HW_VERSION_2
+                     .left_align = true,
+                     .big_endian = false,
+                     .bit_order_lsb = false
+#endif
 
         },
-        .gpio_cfg = {
-            .mclk = I2S_GPIO_UNUSED,
-            .bclk = bclk,
-            .ws = ws,
-            .dout = dout,
-            .din = din,
-            .invert_flags = {
-                .mclk_inv = false,
-                .bclk_inv = false,
-                .ws_inv = false
-            }
-        }
-    };
+        .gpio_cfg = {.mclk = I2S_GPIO_UNUSED, .bclk = bclk, .ws = ws, .dout = dout, .din = din, .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false}}};
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_handle_, &std_cfg));
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(rx_handle_, &std_cfg));
     ESP_LOGI(TAG, "Duplex channels created");
@@ -335,26 +316,19 @@ NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output
     ESP_LOGI(TAG, "Simplex channels created");
 }
 
-int NoAudioCodec::Write(const int16_t* data, int samples) {
-    std::vector<int32_t> buffer(samples);
-
-    // output_volume_: 0-100
-    // volume_factor_: 0-65536
-    int32_t volume_factor = pow(double(output_volume_) / 100.0, 2) * 65536;
-    for (int i = 0; i < samples; i++) {
-        int64_t temp = int64_t(data[i]) * volume_factor; // 使用 int64_t 进行乘法运算
-        if (temp > INT32_MAX) {
-            buffer[i] = INT32_MAX;
-        } else if (temp < INT32_MIN) {
-            buffer[i] = INT32_MIN;
-        } else {
-            buffer[i] = static_cast<int32_t>(temp);
-        }
+int NoAudioCodec::Write(const int16_t *data, int samples)
+{
+    std::vector<int16_t> stereo_buffer(samples * 2); // 左右声道交错
+    for (int i = 0; i < samples; i++)
+    {
+        int16_t value = data[i] * output_volume_ / 100;
+        stereo_buffer[2 * i] = value;     // 左声道
+        stereo_buffer[2 * i + 1] = value; // 右声道
     }
 
     size_t bytes_written;
-    ESP_ERROR_CHECK(i2s_channel_write(tx_handle_, buffer.data(), samples * sizeof(int32_t), &bytes_written, portMAX_DELAY));
-    return bytes_written / sizeof(int32_t);
+    ESP_ERROR_CHECK(i2s_channel_write(tx_handle_, stereo_buffer.data(), stereo_buffer.size() * sizeof(int16_t), &bytes_written, portMAX_DELAY));
+    return bytes_written / (2 * sizeof(int16_t)); // 返回采样点数
 }
 
 int NoAudioCodec::Read(int16_t* dest, int samples) {
