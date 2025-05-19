@@ -1,3 +1,4 @@
+#include "dual_network_board.h"
 #include "wifi_board.h"
 #include "audio_codecs/no_audio_codec.h"
 #include "display/lcd_display.h"
@@ -62,10 +63,13 @@ static const gc9a01_lcd_init_cmd_t gc9107_lcd_init_cmds[] = {
 LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(font_awesome_16_4);
 
-class CompactWifiBoardLCD : public WifiBoard
+class CompactWifiBoardLCD : public DualNetworkBoard
 {
 private:
     Button boot_button_;
+    Button touch_button_;
+    Button volume_up_button_;
+    Button volume_down_button_;
     LcdDisplay *display_;
 
     void InitializeSpi()
@@ -142,7 +146,8 @@ private:
                              {
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                ResetWifiConfiguration();
+                auto &wifi_board = static_cast<WifiBoard &>(GetCurrentBoard());
+                wifi_board.ResetWifiConfiguration();
             }
             app.ToggleChatState(); });
     }
@@ -159,7 +164,10 @@ private:
     }
 
 public:
-    CompactWifiBoardLCD() : boot_button_(BOOT_BUTTON_GPIO)
+    CompactWifiBoardLCD() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 4096), boot_button_(BOOT_BUTTON_GPIO),
+                            touch_button_(TOUCH_BUTTON_GPIO),
+                            volume_up_button_(VOLUME_UP_BUTTON_GPIO),
+                            volume_down_button_(VOLUME_DOWN_BUTTON_GPIO)
     {
         InitializeSpi();
         InitializeLcdDisplay();
