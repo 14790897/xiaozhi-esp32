@@ -56,19 +56,19 @@ private:
     }
 
 public:
-    Motor() : Thing("Motor", "一个可调速的震动蛋"), power_(false)
+    Motor() : Thing("Motor", "一个可调速的震动马达"), power_(false)
     {
         InitializePwm();
 
         // 定义设备的属性
-        properties_.AddBooleanProperty("power", "震动蛋是否运行", [this]() -> bool
+        properties_.AddBooleanProperty("power", "震动马达是否运行", [this]() -> bool
                                        { return power_; });
 
-        properties_.AddNumberProperty("speed", "震动蛋速度", [this]() -> int
+        properties_.AddNumberProperty("speed", "震动马达速度", [this]() -> int
                                       { return speed_; });
 
         // 定义设备可以被远程执行的指令
-        methods_.AddMethod("TurnOn", "启动震动蛋", ParameterList(), [this](const ParameterList &parameters)
+        methods_.AddMethod("TurnOn", "启动震动马达", ParameterList(), [this](const ParameterList &parameters)
                            {
             power_ = true;
             speed_ = 100;
@@ -76,7 +76,7 @@ public:
             ledc_update_duty(LEDC_LOW_SPEED_MODE, MOTOR_PWM_CHANNEL);
             ESP_LOGI(TAG, "Motor turned ON with speed %d", speed_); });
 
-        methods_.AddMethod("TurnOff", "停止震动蛋", ParameterList(), [this](const ParameterList &parameters)
+        methods_.AddMethod("TurnOff", "停止震动马达", ParameterList(), [this](const ParameterList &parameters)
                            {
             power_ = false;
             speed_ = 0;
@@ -84,7 +84,7 @@ public:
             ledc_update_duty(LEDC_LOW_SPEED_MODE, MOTOR_PWM_CHANNEL);
             ESP_LOGI(TAG, "Motor turned OFF"); });
 
-        methods_.AddMethod("SetSpeed", "设置震动蛋速度", ParameterList({Parameter("speed", "速度(0-100)", kValueTypeNumber, true)}), [this](const ParameterList &parameters)
+        methods_.AddMethod("SetSpeed", "设置震动马达速度", ParameterList({Parameter("speed", "速度(0-100)", kValueTypeNumber, true)}), [this](const ParameterList &parameters)
                            {
             int new_speed = static_cast<int>(parameters["speed"].number());
             if (new_speed <= 0) {
@@ -100,7 +100,7 @@ public:
             }
             ESP_LOGI(TAG, "Motor speed set to %d", speed_); });
 
-        methods_.AddMethod("FadeSpeed", "渐变调节震动蛋速度", ParameterList({Parameter("target_speed", "目标速度(0-100)", kValueTypeNumber, true), Parameter("fade_time", "渐变时间(毫秒)", kValueTypeNumber, true)}), [this](const ParameterList &parameters)
+        methods_.AddMethod("FadeSpeed", "渐变调节震动马达速度", ParameterList({Parameter("target_speed", "目标速度(0-100)", kValueTypeNumber, true), Parameter("fade_time", "渐变时间(毫秒)", kValueTypeNumber, true)}), [this](const ParameterList &parameters)
                            {
             int target_speed = static_cast<int>(parameters["target_speed"].number());
             int fade_time = static_cast<int>(parameters["fade_time"].number());
