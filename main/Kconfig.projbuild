@@ -34,6 +34,8 @@ choice BOARD_TYPE
         bool "面包板新版接线（WiFi）+ LCD"
     config BOARD_TYPE_BREAD_COMPACT_WIFI_LCD_MOTOR
         bool "面包板新版接线（WiFi）+ LCD + 电机"
+    config BOARD_TYPE_BREAD_COMPACT_WIFI_LCD_MOTOR_4G
+        bool "面包板新版接线（WiFi）+ LCD + 电机 + 4G"
     config BOARD_TYPE_BREAD_COMPACT_ML307
         bool "面包板新版接线（ML307 AT）"
     config BOARD_TYPE_BREAD_COMPACT_ESP32
