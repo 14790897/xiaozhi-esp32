@@ -152,6 +152,12 @@ private:
                 wifi_board.ResetWifiConfiguration();
             }
             app.ToggleChatState(); });
+        boot_button_.OnDoubleClick([this]()
+                                   {
+                auto& app = Application::GetInstance();
+                if (app.GetDeviceState() == kDeviceStateStarting || app.GetDeviceState() == kDeviceStateWifiConfiguring) {
+                    SwitchNetworkType();
+                } });
         touch_button_.OnPressDown([this]()
                                   { Application::GetInstance().StartListening(); });
         touch_button_.OnPressUp([this]()
