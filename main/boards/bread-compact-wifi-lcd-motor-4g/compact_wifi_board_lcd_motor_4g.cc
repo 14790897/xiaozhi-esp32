@@ -60,12 +60,12 @@ static const gc9a01_lcd_init_cmd_t gc9107_lcd_init_cmds[] = {
 };
 #endif
 
-#define TAG "CompactWifiBoardLCD"
+#define TAG "CompactWifiBoardLCDMotor4G"
 
 LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(font_awesome_16_4);
 
-class CompactWifiBoardLCD : public DualNetworkBoard
+class CompactWifiBoardLCDMotor4G : public DualNetworkBoard
 {
 private:
     Button boot_button_;
@@ -206,10 +206,10 @@ private:
     }
 
 public:
-    CompactWifiBoardLCD() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 4096), boot_button_(BOOT_BUTTON_GPIO),
-                            touch_button_(TOUCH_BUTTON_GPIO),
-                            volume_up_button_(VOLUME_UP_BUTTON_GPIO),
-                            volume_down_button_(VOLUME_DOWN_BUTTON_GPIO)
+    CompactWifiBoardLCDMotor4G() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 4096), boot_button_(BOOT_BUTTON_GPIO),
+                                   touch_button_(TOUCH_BUTTON_GPIO),
+                                   volume_up_button_(VOLUME_UP_BUTTON_GPIO),
+                                   volume_down_button_(VOLUME_DOWN_BUTTON_GPIO)
     {
         InitializeSpi();
         InitializeLcdDisplay();
@@ -255,4 +255,4 @@ public:
     }
 };
 
-DECLARE_BOARD(CompactWifiBoardLCD);
+DECLARE_BOARD(CompactWifiBoardLCDMotor4G);
