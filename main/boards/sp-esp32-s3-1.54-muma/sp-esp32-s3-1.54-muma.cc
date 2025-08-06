@@ -1,19 +1,19 @@
 #include "wifi_board.h"
-#include "audio_codecs/es8311_audio_codec.h"
+#include "codecs/es8311_audio_codec.h"
 #include "display/lcd_display.h"
 #include "application.h"
 #include "button.h"
 #include "config.h"
-#include "iot/thing_manager.h"
 #include "led/single_led.h"
 #include "assets/lang_config.h"
 #include <wifi_station.h>
 #include <esp_log.h>
-#include <esp_efuse_table.h>
 #include <driver/i2c_master.h>
 #include "system_reset.h"
+
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
+
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include <esp_lcd_panel_vendor.h>
@@ -22,6 +22,9 @@
 #include "i2c_device.h"
 #include <esp_timer.h>
 #include "power_manager.h"
+#include "power_save_timer.h"
+#include <esp_sleep.h>
+#include <driver/rtc_io.h>
 
 #define TAG "Spotpear_esp32_s3_lcd_1_54"
 
@@ -73,11 +76,44 @@ private:
     esp_timer_handle_t touchpad_timer_;
     Cst816d* cst816d_;
     esp_io_expander_handle_t io_expander_ = NULL;
-    PowerManager* power_manager_;
+    esp_lcd_panel_handle_t panel_ = nullptr;
 
+    PowerManager* power_manager_;
+    PowerSaveTimer* power_save_timer_;
     void InitializePowerManager() {
-        power_manager_ =
-            new PowerManager(POWER_CHARGE_DETECT_PIN, POWER_CHARGE_LED_PIN, POWER_ADC_UNIT, POWER_ADC_CHANNEL);
+        power_manager_ = new PowerManager(GPIO_NUM_41);
+        power_manager_->OnChargingStatusChanged([this](bool is_charging) {
+            if (is_charging) {
+                power_save_timer_->SetEnabled(false);
+            } else {
+                power_save_timer_->SetEnabled(true);
+            }
+        });
+    }
+
+    void InitializePowerSaveTimer() {
+        rtc_gpio_init(GPIO_NUM_3);
+        rtc_gpio_set_direction(GPIO_NUM_3, RTC_GPIO_MODE_OUTPUT_ONLY);
+        rtc_gpio_set_level(GPIO_NUM_3, 1);
+
+        power_save_timer_ = new PowerSaveTimer(-1, 60, 300);
+        power_save_timer_->OnEnterSleepMode([this]() {
+            GetDisplay()->SetPowerSaveMode(true);
+            GetBacklight()->SetBrightness(1);
+        });
+        power_save_timer_->OnExitSleepMode([this]() {
+            GetDisplay()->SetPowerSaveMode(false);
+            GetBacklight()->RestoreBrightness();
+        });
+        power_save_timer_->OnShutdownRequest([this]() {
+            ESP_LOGI(TAG, "Shutting down");
+            rtc_gpio_set_level(GPIO_NUM_3, 0);
+            // 启用保持功能，确保睡眠期间电平不变
+            rtc_gpio_hold_en(GPIO_NUM_3);
+            esp_lcd_panel_disp_on_off(panel_, false); //关闭显示
+            esp_deep_sleep_start();
+        });
+        power_save_timer_->SetEnabled(true);
     }
 
     void InitializeCodecI2c() {
@@ -235,14 +271,6 @@ private:
         });
     }
 
-    // 物联网初始化，添加对 AI 可见设备
-    void InitializeIot() {
-        auto& thing_manager = iot::ThingManager::GetInstance();
-        thing_manager.AddThing(iot::CreateThing("Speaker"));
-        thing_manager.AddThing(iot::CreateThing("Screen"));
-        thing_manager.AddThing(iot::CreateThing("Battery"));
-    }
-
 public:
 
     Spotpear_esp32_s3_lcd_1_54() :boot_button_(BOOT_BUTTON_GPIO){
@@ -252,12 +280,12 @@ public:
             InitializeCodecI2c_Touch();
             InitializeCst816DTouchPad();
         }
+        InitializePowerSaveTimer();
         InitializeCodecI2c();
         InitializeSpi();
         InitializePowerManager();
         InitializeSt7789Display();
         InitializeButtons();
-        InitializeIot();
         GetBacklight()->RestoreBrightness();
 
     }
@@ -286,11 +314,24 @@ public:
     Cst816d* GetTouchpad() {
         return cst816d_;
     }
+
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
+        static bool last_discharging = false;
         charging = power_manager_->IsCharging();
-        discharging = !charging;
+        discharging = power_manager_->IsDischarging();
+        if (discharging != last_discharging) {
+            power_save_timer_->SetEnabled(discharging);
+            last_discharging = discharging;
+        }
         level = power_manager_->GetBatteryLevel();
         return true;
+    }
+
+    virtual void SetPowerSaveMode(bool enabled) override {
+        if (!enabled) {
+            power_save_timer_->WakeUp();
+        }
+        WifiBoard::SetPowerSaveMode(enabled);
     }
 };
 

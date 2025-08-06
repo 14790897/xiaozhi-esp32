@@ -1,11 +1,10 @@
 #include "wifi_board.h"
-#include "audio_codecs/no_audio_codec.h"
+#include "codecs/no_audio_codec.h"
 #include "display/lcd_display.h"
 #include "system_reset.h"
 #include "application.h"
 #include "button.h"
 #include "config.h"
-#include "iot/thing_manager.h"
 
 #include <esp_log.h>
 #include "i2c_device.h"
@@ -173,7 +172,7 @@ private:
         boot_btn_driver_ = (button_driver_t*)calloc(1, sizeof(button_driver_t));
         boot_btn_driver_->enable_power_save = false;
         boot_btn_driver_->get_key_level = [](button_driver_t *button_driver) -> uint8_t {
-            return gpio_get_level(BOOT_BUTTON_GPIO);
+            return !gpio_get_level(BOOT_BUTTON_GPIO);
         };
         ESP_ERROR_CHECK(iot_button_create(&boot_btn_config, boot_btn_driver_, &boot_btn));
         iot_button_register_cb(boot_btn, BUTTON_SINGLE_CLICK, nullptr, [](void* button_handle, void* usr_data) {
@@ -196,7 +195,7 @@ private:
         pwr_btn_driver_ = (button_driver_t*)calloc(1, sizeof(button_driver_t));
         pwr_btn_driver_->enable_power_save = false;
         pwr_btn_driver_->get_key_level = [](button_driver_t *button_driver) -> uint8_t {
-            return gpio_get_level(PWR_BUTTON_GPIO);
+            return !gpio_get_level(PWR_BUTTON_GPIO);
         };
         ESP_ERROR_CHECK(iot_button_create(&pwr_btn_config, pwr_btn_driver_, &pwr_btn));
         iot_button_register_cb(pwr_btn, BUTTON_SINGLE_CLICK, nullptr, [](void* button_handle, void* usr_data) {
@@ -215,13 +214,6 @@ private:
         }, this);
     }
 
-    // 物联网初始化，添加对 AI 可见设备
-    void InitializeIot() {
-        auto& thing_manager = iot::ThingManager::GetInstance();
-        thing_manager.AddThing(iot::CreateThing("Speaker"));
-        thing_manager.AddThing(iot::CreateThing("Screen"));
-    }
-
 public:
     CustomBoard() { 
         InitializeI2c();
@@ -229,7 +221,6 @@ public:
         InitializeSpi();
         InitializeSpd2010Display();
         InitializeButtons();
-        InitializeIot();
         GetBacklight()->RestoreBrightness();
     }
 

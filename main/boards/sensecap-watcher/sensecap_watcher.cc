@@ -8,8 +8,8 @@
 #include "knob.h"
 #include "config.h"
 #include "led/single_led.h"
-#include "iot/thing_manager.h"
 #include "power_save_timer.h"
+#include "sscma_camera.h"
 
 #include <esp_log.h>
 #include "esp_check.h"
@@ -97,20 +97,16 @@ private:
     uint32_t long_press_cnt_;
     button_driver_t* btn_driver_ = nullptr;
     static SensecapWatcher* instance_;
+    SscmaCamera* camera_ = nullptr;
 
     void InitializePowerSaveTimer() {
         power_save_timer_ = new PowerSaveTimer(-1, 60, 300);
         power_save_timer_->OnEnterSleepMode([this]() {
-            ESP_LOGI(TAG, "Enabling sleep mode");
-            auto display = GetDisplay();
-            display->SetChatMessage("system", "");
-            display->SetEmotion("sleepy");
+            GetDisplay()->SetPowerSaveMode(true);
             GetBacklight()->SetBrightness(10);
         });
         power_save_timer_->OnExitSleepMode([this]() {
-            auto display = GetDisplay();
-            display->SetChatMessage("system", "");
-            display->SetEmotion("neutral");
+            GetDisplay()->SetPowerSaveMode(false);
             GetBacklight()->RestoreBrightness();
         });
         power_save_timer_->OnShutdownRequest([this]() {
@@ -288,6 +284,19 @@ private:
     }
 
     void InitializeSpi() {
+        ESP_LOGI(TAG, "Initialize SSCMA SPI bus");
+        spi_bus_config_t spi_cfg = {0};
+
+        spi_cfg.mosi_io_num = BSP_SPI2_HOST_MOSI;
+        spi_cfg.miso_io_num = BSP_SPI2_HOST_MISO;
+        spi_cfg.sclk_io_num = BSP_SPI2_HOST_SCLK;
+        spi_cfg.quadwp_io_num = -1;
+        spi_cfg.quadhd_io_num = -1;
+        spi_cfg.isr_cpu_id = ESP_INTR_CPU_AFFINITY_1;
+        spi_cfg.max_transfer_sz = 4095;
+   
+        ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &spi_cfg, SPI_DMA_CH_AUTO));
+
         ESP_LOGI(TAG, "Initialize QSPI bus");
 
         spi_bus_config_t qspi_cfg = {0};
@@ -350,14 +359,6 @@ private:
             area->x2 = ((x2 >> 2) << 2) + 3;
         }, LV_EVENT_INVALIDATE_AREA, NULL);
         
-    }
-
-    // 物联网初始化，添加对 AI 可见设备
-    void InitializeIot() {
-        auto& thing_manager = iot::ThingManager::GetInstance();
-        thing_manager.AddThing(iot::CreateThing("Speaker"));
-        thing_manager.AddThing(iot::CreateThing("Screen"));
-        thing_manager.AddThing(iot::CreateThing("Battery"));
     }
 
     uint16_t BatterygetVoltage(void) {
@@ -501,6 +502,27 @@ private:
         ESP_ERROR_CHECK(esp_console_start_repl(repl));
     }
 
+    void InitializeCamera() {
+
+        ESP_LOGI(TAG, "Initialize Camera");
+
+        // !!!NOTE: SD Card use same SPI bus as sscma client, so we need to disable SD card CS pin first
+        const gpio_config_t io_config = {
+            .pin_bit_mask = (1ULL << BSP_SD_SPI_CS),
+            .mode = GPIO_MODE_OUTPUT,
+            .pull_up_en = GPIO_PULLUP_ENABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE,
+        };
+        esp_err_t ret = gpio_config(&io_config);
+        if (ret != ESP_OK)
+            return;
+
+        gpio_set_level(BSP_SD_SPI_CS, 1);
+
+        camera_ = new SscmaCamera(io_exp_handle);
+    }
+
 public:
     SensecapWatcher() {
         ESP_LOGI(TAG, "Initialize Sensecap Watcher");
@@ -512,8 +534,8 @@ public:
         InitializeButton();
         InitializeKnob();
         Initializespd2010Display();
-        InitializeIot();
-        GetBacklight()->RestoreBrightness();
+        GetBacklight()->RestoreBrightness();  // 对于不带摄像头的版本，InitializeCamera需要3s, 所以先恢复背光亮度
+        InitializeCamera();
     }
 
     virtual AudioCodec* GetAudioCodec() override {
@@ -572,6 +594,10 @@ public:
             IoExpanderSetLevel(BSP_PWR_SYSTEM, 0);
         }
         return true;
+    }
+
+    virtual Camera* GetCamera() override {
+        return camera_;
     }
 };
 
